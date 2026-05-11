@@ -25,9 +25,12 @@ type ProfileConfigs struct {
 
 // CoreConfig is the config struct
 type CoreConfig struct {
-	PermifyURL			 string  `yaml:"permify_url"`
-	Tenant 				 string  `yaml:"tenant"`
-	SslEnabled           bool    `yaml:"-"`
+	PermifyURL  string `yaml:"permify_url"`
+	Tenant      string `yaml:"tenant"`
+	Token       string `yaml:"token,omitempty"`
+	CertPath    string `yaml:"cert_path,omitempty"`
+	CertKeyPath string `yaml:"cert_key_path,omitempty"`
+	SslEnabled  bool   `yaml:"-"`
 }
 
 // IsConfigured checks if permctl cli has been configured
@@ -49,6 +52,11 @@ func IsConfigured(file string, profile string) error {
 	}
 	if profileConfigs.Configs[profile].Tenant == "" {
 		return fmt.Errorf("tenant is empty for profile %s", profile)
+	}
+	certPath := profileConfigs.Configs[profile].CertPath
+	certKeyPath := profileConfigs.Configs[profile].CertKeyPath
+	if (certPath == "") != (certKeyPath == "") {
+		return fmt.Errorf("both cert_path and cert_key_path must be set for profile %s", profile)
 	}
 	return nil
 }
