@@ -25,11 +25,11 @@ type ProfileConfigs struct {
 
 // CoreConfig is the config struct
 type CoreConfig struct {
-	PermifyURL  string `yaml:"permify_url"`
+	PermifyURL  string `yaml:"permify_url,omitempty"`
 	Tenant      string `yaml:"tenant"`
-	Token       string `yaml:"token,omitempty"`
-	CertPath    string `yaml:"cert_path,omitempty"`
-	CertKeyPath string `yaml:"cert_key_path,omitempty"`
+	Token       string `yaml:"-"`
+	CertPath    string `yaml:"-"`
+	CertKeyPath string `yaml:"-"`
 	SslEnabled  bool   `yaml:"-"`
 }
 
@@ -47,15 +47,17 @@ func IsConfigured(file string, profile string) error {
 	if err != nil {
 		logger.Log.Fatal("Error unmarshaling yaml")
 	}
-	if profileConfigs.Configs[profile].PermifyURL == "" {
+	cfg := profileConfigs.Configs[profile]
+	if err = applyStoredCredentials(profile, &cfg); err != nil {
+		return err
+	}
+	if cfg.PermifyURL == "" {
 		return fmt.Errorf("permify url is empty for profile %s", profile)
 	}
-	if profileConfigs.Configs[profile].Tenant == "" {
+	if cfg.Tenant == "" {
 		return fmt.Errorf("tenant is empty for profile %s", profile)
 	}
-	certPath := profileConfigs.Configs[profile].CertPath
-	certKeyPath := profileConfigs.Configs[profile].CertKeyPath
-	if (certPath == "") != (certKeyPath == "") {
+	if (cfg.CertPath == "") != (cfg.CertKeyPath == "") {
 		return fmt.Errorf("both cert_path and cert_key_path must be set for profile %s", profile)
 	}
 	return nil
@@ -78,6 +80,9 @@ func Load(file string, profile string) error {
 	profileConfigs.File = file
 	profileConfigs.Profile = profile
 	CliConfig = profileConfigs.Configs[profile]
+	if err = applyStoredCredentials(profile, &CliConfig); err != nil {
+		return err
+	}
 	CliConfig.SslEnabled = strings.HasPrefix(CliConfig.PermifyURL, "https")
 	return err
 }
@@ -104,10 +109,25 @@ func Write() error {
 	}
 	profile := profileConfigs.Profile
 	profileConfigs.Configs[profile] = CliConfig
-	newConfigDataByte, err := yaml.Marshal(profileConfigs.Configs)
+	newConfigDataByte, err := yaml.Marshal(configsWithoutCredentials(profileConfigs.Configs))
 	if err != nil {
 		return err
 	}
 	err = os.WriteFile(profileConfigs.File, newConfigDataByte, fs.FileMode(0644))
-	return err
+	if err != nil {
+		return err
+	}
+	return writeStoredCredentials(profileConfigs.Configs)
+}
+
+func configsWithoutCredentials(configs map[string]CoreConfig) map[string]CoreConfig {
+	clean := make(map[string]CoreConfig, len(configs))
+	for profile, cfg := range configs {
+		cfg.PermifyURL = ""
+		cfg.Token = ""
+		cfg.CertPath = ""
+		cfg.CertKeyPath = ""
+		clean[profile] = cfg
+	}
+	return clean
 }
